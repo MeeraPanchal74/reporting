@@ -19,4 +19,7 @@ public class Entity {
     @Field(type = FieldType.Keyword, name = "hashtags")
     private List<String> hashtags;
 
+    @Field(type=FieldType.Text, name = "token")
+    private String token;
+
 }

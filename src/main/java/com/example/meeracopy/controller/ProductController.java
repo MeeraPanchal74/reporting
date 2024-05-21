@@ -12,6 +12,7 @@ import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.Aggregations;
@@ -21,6 +22,7 @@ import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilde
 import org.elasticsearch.search.aggregations.metrics.ParsedSum;
 import org.elasticsearch.search.aggregations.metrics.SumAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.ValueCount;
+import org.elasticsearch.search.aggregations.metrics.ValueCountAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -36,6 +38,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static org.elasticsearch.index.query.QueryBuilders.*;
 
 @RestController
 @Slf4j
@@ -135,7 +139,7 @@ public class ProductController {
     public long countSensitiveDocuments() throws IOException {
 
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery()
+        BoolQueryBuilder boolQueryBuilder = boolQuery()
                 .must(QueryBuilders.termQuery("inStock", true));
 
 
@@ -150,23 +154,48 @@ public class ProductController {
         return count;
     }
 
-    @GetMapping("/searchByFieldInList")
+    @GetMapping("/searchByFieldInList")     //GET /searchByFieldInList?fieldName=tags&value=my_tag
+
     public long searchByFieldInList(@RequestParam String fieldName, @RequestParam String value) throws IOException {
-        // Build the search source
+
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-
-        // Construct the terms query to search for the value in the specified field inside the list
         searchSourceBuilder.query(QueryBuilders.termsQuery(fieldName, value));
-
-        // Create the search request
-        SearchRequest searchRequest = new SearchRequest("products"); // Replace "index_name" with your Elasticsearch index name
+        SearchRequest searchRequest = new SearchRequest("products");
         searchRequest.source(searchSourceBuilder);
-
-        // Execute the search request and return the response
-
         SearchResponse response= getRestClient().search(searchRequest, RequestOptions.DEFAULT);
         long count = response.getHits().getTotalHits().value;
         return count;
+    }
+
+    @GetMapping("/searchByFieldInNestedObject")
+    public long searchByFieldInNestedObject(@RequestParam String nestedFieldName, @RequestParam String nestedFieldvalue) throws IOException {
+
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query( QueryBuilders.termsQuery("entity."+nestedFieldName , nestedFieldvalue));
+        SearchRequest searchRequest = new SearchRequest("products"); // Replace "index_name" with your Elasticsearch index name
+        searchRequest.source(searchSourceBuilder);
+        SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+            return response.getHits().getTotalHits().value;
+
+
+    }
+
+    @GetMapping("/countProductsByCategory")
+    public long countProductsByCategory(@RequestParam String term) throws IOException {
+
+        SearchRequest searchRequest = new SearchRequest("products");
+
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query(QueryBuilders.matchQuery("category", term));
+
+        ValueCountAggregationBuilder aggregation = AggregationBuilders.count("count").field("category");
+        searchSourceBuilder.aggregation(aggregation);
+
+        searchRequest.source(searchSourceBuilder);
+
+        SearchResponse searchResponse =  getRestClient() .search(searchRequest, RequestOptions.DEFAULT);
+        return searchResponse.getHits().getTotalHits().value;
+
     }
 
     public static RestHighLevelClient getRestClient() {
