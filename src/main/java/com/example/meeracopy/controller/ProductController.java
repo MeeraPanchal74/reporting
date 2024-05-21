@@ -3,7 +3,9 @@ package com.example.meeracopy.controller;
 
 
 
+import com.example.meeracopy.domain.ObjectBody;
 import com.example.meeracopy.domain.Product;
+import com.example.meeracopy.domain.ReturnObj;
 import com.example.meeracopy.repo.ProductRepo;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.HttpHost;
@@ -34,7 +36,10 @@ import org.elasticsearch.search.aggregations.bucket.filter.Filter;
 
 
 import java.io.IOException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -135,29 +140,25 @@ public class ProductController {
 
         return Collections.singletonMap("total_price", totalMarketCapacity);
     }
+
+
     @GetMapping("/countInStock") // for isSensitive field
     public long countSensitiveDocuments() throws IOException {
 
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         BoolQueryBuilder boolQueryBuilder = boolQuery()
                 .must(QueryBuilders.termQuery("inStock", true));
-
-
         searchSourceBuilder.query(boolQueryBuilder);
-
         SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
-
-
         SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
         long count = response.getHits().getTotalHits().value;
 
         return count;
     }
 
-    @GetMapping("/searchByFieldInList")     //GET /searchByFieldInList?fieldName=tags&value=my_tag
+    @GetMapping("/searchByFieldInList")     //GET /searchByFieldInList?fieldName=tags&value=weapon
 
     public long searchByFieldInList(@RequestParam String fieldName, @RequestParam String value) throws IOException {
-
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         searchSourceBuilder.query(QueryBuilders.termsQuery(fieldName, value));
         SearchRequest searchRequest = new SearchRequest("products");
@@ -188,8 +189,6 @@ public class ProductController {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         searchSourceBuilder.query(QueryBuilders.matchQuery("category", term));
 
-        ValueCountAggregationBuilder aggregation = AggregationBuilders.count("count").field("category");
-        searchSourceBuilder.aggregation(aggregation);
 
         searchRequest.source(searchSourceBuilder);
 
@@ -198,6 +197,48 @@ public class ProductController {
 
     }
 
+
+   /* @GetMapping("/countProductsByCategoryAndDate")
+    public long countProductsByCategoryAndDate(
+                                               @RequestParam String startDate,
+                                               @RequestParam String endDate) throws IOException, ParseException {
+
+        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
+        Date start = formatter.parse(startDate);
+        Date end = formatter.parse(endDate);
+
+        SearchRequest searchRequest = new SearchRequest("products");
+
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query(QueryBuilders.rangeQuery("createdAt").gte(start).lte(end));
+
+        searchRequest.source(searchSourceBuilder);
+
+        SearchResponse searchResponse =getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+        return searchResponse.getHits().getTotalHits().value;
+
+    }*/
+   @PostMapping("/generalQuery")
+    public ReturnObj generalQuery(@RequestBody ObjectBody obj) throws IOException {
+        String filt = obj.filter;
+        String aggr = obj.aggregations;
+        ReturnObj object = new ReturnObj();
+
+        if(filt=="inStock") {
+            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+            BoolQueryBuilder boolQueryBuilder = boolQuery()
+                    .must(QueryBuilders.termQuery("inStock", true));
+            searchSourceBuilder.query(boolQueryBuilder);
+            SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
+            SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+            long count1 = response.getHits().getTotalHits().value;
+            object.count = count1;
+        }
+
+
+       return object;
+
+    }
     public static RestHighLevelClient getRestClient() {
         return new RestHighLevelClient(
                 RestClient.builder(

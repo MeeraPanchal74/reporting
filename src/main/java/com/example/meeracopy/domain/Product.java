@@ -9,6 +9,7 @@ import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
+import java.util.Date;
 import java.util.List;
 
 @Data
@@ -38,8 +39,8 @@ public class Product {
     @Field(type = FieldType.Keyword, name = "tags")
     private List<String> tags;
 
-
-
+    @Field(type = FieldType.Date, name = "createdAt")
+    private Date createdAt;
 
 }
 
