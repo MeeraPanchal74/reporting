@@ -3,6 +3,7 @@ package com.example.meeracopy.repo;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.*;
 import com.example.meeracopy.domain.Product;
+import com.example.meeracopy.domain.UnifiedModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
@@ -15,6 +16,7 @@ import java.util.Map;
 public class ProductRepo {
 
     public static final String PRODUCTS = "products";
+    public static final String GLOBALDATA1 = "globaldata1";
     @Autowired
     private ElasticsearchClient elasticsearchClient;
 
@@ -58,6 +60,8 @@ public class ProductRepo {
 
     }
 
+
+
     public String bulkSave(List<Product> products) throws IOException {
         BulkRequest.Builder br = new BulkRequest.Builder();
         products.stream().forEach(product->br.operations(operation->
@@ -72,5 +76,36 @@ public class ProductRepo {
         } else {
             return new StringBuffer("Bulk save success").toString();
         }
+    }
+
+    /*******************/
+    public String bulkSaveGlobal(List<UnifiedModel> unifiedModels) throws IOException {
+        BulkRequest.Builder br = new BulkRequest.Builder();
+        unifiedModels.stream().forEach(unifiedModel->br.operations(operation->
+                operation.index(i->i
+                        .index(GLOBALDATA1)
+                        .id(unifiedModel.getId())
+                        .document(unifiedModel))));
+
+        BulkResponse response =elasticsearchClient.bulk(br.build());
+        if(response.errors()){
+            return new StringBuffer("Bulk has errors").toString();
+        } else {
+            return new StringBuffer("Bulk save success").toString();
+        }
+    }
+
+
+    public List<UnifiedModel> findAllGlobal() throws IOException {
+        SearchRequest request = SearchRequest.of(s->s.index(GLOBALDATA1));
+        SearchResponse<UnifiedModel> response = elasticsearchClient.search(request,UnifiedModel.class);
+
+        List<UnifiedModel> unifiedModels = new ArrayList<>();
+        response.hits().hits().stream().forEach(object->{
+            unifiedModels.add(object.source());
+
+        });
+        return unifiedModels;
+
     }
 }
