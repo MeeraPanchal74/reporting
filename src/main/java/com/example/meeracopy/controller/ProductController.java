@@ -38,10 +38,7 @@ import org.elasticsearch.search.aggregations.bucket.filter.Filter;
 import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.elasticsearch.index.query.QueryBuilders.*;
@@ -92,20 +89,12 @@ public class ProductController {
 
 
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query(QueryBuilders.matchAllQuery()).size(0);
-
-
+        searchSourceBuilder.query(matchAllQuery()).size(0);
         TermsAggregationBuilder groupByCategory = AggregationBuilders.terms("group_by_category").field("category.keyword").size(2);
         searchSourceBuilder.aggregation(groupByCategory);
-
-
         SearchRequest searchRequest = new SearchRequest("products");
         searchRequest.source(searchSourceBuilder);
-
-
         SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-
-
         Aggregations aggregation = response.getAggregations();
         Map<Object, Long> countsPerCategory = ((ParsedStringTerms) aggregation.get("group_by_category")).getBuckets().stream()
                 .collect(Collectors.toMap(Terms.Bucket::getKey, Terms.Bucket::getDocCount));
@@ -119,25 +108,15 @@ public class ProductController {
     @GetMapping("/totalPrice")
     public Map<String, Double> getTotalMarketCapacity() throws IOException {
 
-
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query(QueryBuilders.matchAllQuery()).size(0);
-
-
+        searchSourceBuilder.query(matchAllQuery()).size(0);
         SumAggregationBuilder sumAggregation = AggregationBuilders.sum("total_price").field("price");
         searchSourceBuilder.aggregation(sumAggregation);
-
-
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(searchSourceBuilder);
-
-
         SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-
         Aggregations aggregation = response.getAggregations();
-
         double totalMarketCapacity = ((ParsedSum) aggregation.get("total_price")).getValue();
-
         return Collections.singletonMap("total_price", totalMarketCapacity);
     }
 
@@ -147,7 +126,7 @@ public class ProductController {
 
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         BoolQueryBuilder boolQueryBuilder = boolQuery()
-                .must(QueryBuilders.termQuery("inStock", true));
+                .must(termQuery("inStock", true));
         searchSourceBuilder.query(boolQueryBuilder);
         SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
         SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
@@ -160,7 +139,7 @@ public class ProductController {
 
     public long searchByFieldInList(@RequestParam String fieldName, @RequestParam String value) throws IOException {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query(QueryBuilders.termsQuery(fieldName, value));
+        searchSourceBuilder.query(termsQuery(fieldName, value));
         SearchRequest searchRequest = new SearchRequest("products");
         searchRequest.source(searchSourceBuilder);
         SearchResponse response= getRestClient().search(searchRequest, RequestOptions.DEFAULT);
@@ -170,9 +149,8 @@ public class ProductController {
 
     @GetMapping("/searchByFieldInNestedObject")
     public long searchByFieldInNestedObject(@RequestParam String nestedFieldName, @RequestParam String nestedFieldvalue) throws IOException {
-
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query( QueryBuilders.termsQuery("entity."+nestedFieldName , nestedFieldvalue));
+        searchSourceBuilder.query( termsQuery("entity."+nestedFieldName , nestedFieldvalue));
         SearchRequest searchRequest = new SearchRequest("products"); // Replace "index_name" with your Elasticsearch index name
         searchRequest.source(searchSourceBuilder);
         SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
@@ -185,13 +163,9 @@ public class ProductController {
     public long countProductsByCategory(@RequestParam String term) throws IOException {
 
         SearchRequest searchRequest = new SearchRequest("products");
-
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query(QueryBuilders.matchQuery("category", term));
-
-
+        searchSourceBuilder.query(matchQuery("category", term));
         searchRequest.source(searchSourceBuilder);
-
         SearchResponse searchResponse =  getRestClient() .search(searchRequest, RequestOptions.DEFAULT);
         return searchResponse.getHits().getTotalHits().value;
 
@@ -221,20 +195,54 @@ public class ProductController {
    @PostMapping("/generalQuery")
     public ReturnObj generalQuery(@RequestBody ObjectBody obj) throws IOException {
         String filt = obj.filter;
-        String aggr = obj.aggregations;
+       List <String> aggr = obj.aggregations;
+         long count1 = 0;
         ReturnObj object = new ReturnObj();
+        System.out.println(filt);
 
-        if(filt=="inStock") {
+       if(Objects.equals(filt, "inStock")) {
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
             BoolQueryBuilder boolQueryBuilder = boolQuery()
-                    .must(QueryBuilders.termQuery("inStock", true));
+                    .must(termQuery("inStock", true));
             searchSourceBuilder.query(boolQueryBuilder);
             SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
             SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-            long count1 = response.getHits().getTotalHits().value;
-            object.count = count1;
-        }
+           count1= response.getHits().getTotalHits().value;
 
+       }
+
+       object.filtcount = count1;
+
+       for(String str:aggr) {
+           if (Objects.equals(str, "byCategory")) {
+
+               SearchSourceBuilder searchSourceBuilder2 = new SearchSourceBuilder();
+               searchSourceBuilder2.query(matchAllQuery()).size(0);
+               TermsAggregationBuilder groupByCategory = AggregationBuilders.terms("group_by_category").field("category.keyword").size(2);
+               searchSourceBuilder2.aggregation(groupByCategory);
+               SearchRequest searchRequest = new SearchRequest("products");
+               searchRequest.source(searchSourceBuilder2);
+               SearchResponse response2 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+               Aggregations aggregation = response2.getAggregations();
+               Map<Object, Long> countsPerCategory = ((ParsedStringTerms) aggregation.get("group_by_category")).getBuckets().stream()
+                       .collect(Collectors.toMap(Terms.Bucket::getKey, Terms.Bucket::getDocCount));
+               object.countByCate = Collections.singletonMap("counts_by_category", countsPerCategory);
+
+           }
+
+           if(Objects.equals(str, "totalPrice")){
+               SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+               searchSourceBuilder.query(matchAllQuery()).size(0);
+               SumAggregationBuilder sumAggregation = AggregationBuilders.sum("total_price").field("price");
+               searchSourceBuilder.aggregation(sumAggregation);
+               SearchRequest searchRequest = new SearchRequest();
+               searchRequest.source(searchSourceBuilder);
+               SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+               Aggregations aggregation = response.getAggregations();
+               double totalMarketCapacity = ((ParsedSum) aggregation.get("total_price")).getValue();
+              object.totalPrice= Collections.singletonMap("total_price", totalMarketCapacity);
+           }
+       }
 
        return object;
 
