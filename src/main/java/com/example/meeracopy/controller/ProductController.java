@@ -1,8 +1,5 @@
 package com.example.meeracopy.controller;
 
-
-
-
 import com.example.meeracopy.domain.ObjectBody;
 import com.example.meeracopy.domain.Product;
 import com.example.meeracopy.domain.ReturnObj;
@@ -23,21 +20,16 @@ import org.elasticsearch.search.aggregations.bucket.terms.Terms;
 import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.ParsedSum;
 import org.elasticsearch.search.aggregations.metrics.SumAggregationBuilder;
-import org.elasticsearch.search.aggregations.metrics.ValueCount;
-import org.elasticsearch.search.aggregations.metrics.ValueCountAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.sort.SortBuilders;
+import org.elasticsearch.search.sort.SortOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.elasticsearch.client.RestHighLevelClient;
-import org.elasticsearch.search.aggregations.bucket.filter.Filter;
-
-
-
+import org.elasticsearch.search.aggregations.bucket.range.Range;
 import java.io.IOException;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -172,48 +164,29 @@ public class ProductController {
     }
 
 
-   /* @GetMapping("/countProductsByCategoryAndDate")
-    public long countProductsByCategoryAndDate(
-                                               @RequestParam String startDate,
-                                               @RequestParam String endDate) throws IOException, ParseException {
-
-        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
-        Date start = formatter.parse(startDate);
-        Date end = formatter.parse(endDate);
-
-        SearchRequest searchRequest = new SearchRequest("products");
-
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-        searchSourceBuilder.query(QueryBuilders.rangeQuery("createdAt").gte(start).lte(end));
-
-        searchRequest.source(searchSourceBuilder);
-
-        SearchResponse searchResponse =getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-        return searchResponse.getHits().getTotalHits().value;
-
-    }*/
    @PostMapping("/generalQuery")
     public ReturnObj generalQuery(@RequestBody ObjectBody obj) throws IOException {
-        String filt = obj.filter;
-       List <String> aggr = obj.aggregations;
-         long count1 = 0;
-        ReturnObj object = new ReturnObj();
-        System.out.println(filt);
+       String filt = obj.filter;
+       List<String> aggr = obj.aggregations;
 
-       if(Objects.equals(filt, "inStock")) {
-            SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-            BoolQueryBuilder boolQueryBuilder = boolQuery()
-                    .must(termQuery("inStock", true));
-            searchSourceBuilder.query(boolQueryBuilder);
-            SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
-            SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-           count1= response.getHits().getTotalHits().value;
+       long count1 = 0;
+       ReturnObj object = new ReturnObj();
+       System.out.println(filt);
+
+       if (Objects.equals(filt, "inStock")) {
+           SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+           BoolQueryBuilder boolQueryBuilder = boolQuery()
+                   .must(termQuery("inStock", true));
+           searchSourceBuilder.query(boolQueryBuilder);
+           SearchRequest searchRequest = new SearchRequest().source(searchSourceBuilder);
+           SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+           count1 = response.getHits().getTotalHits().value;
 
        }
 
        object.filtcount = count1;
 
-       for(String str:aggr) {
+       for (String str : aggr) {
            if (Objects.equals(str, "byCategory")) {
 
                SearchSourceBuilder searchSourceBuilder2 = new SearchSourceBuilder();
@@ -230,7 +203,7 @@ public class ProductController {
 
            }
 
-           if(Objects.equals(str, "totalPrice")){
+           if (Objects.equals(str, "totalPrice")) {
                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
                searchSourceBuilder.query(matchAllQuery()).size(0);
                SumAggregationBuilder sumAggregation = AggregationBuilders.sum("total_price").field("price");
@@ -240,13 +213,85 @@ public class ProductController {
                SearchResponse response = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
                Aggregations aggregation = response.getAggregations();
                double totalMarketCapacity = ((ParsedSum) aggregation.get("total_price")).getValue();
-              object.totalPrice= Collections.singletonMap("total_price", totalMarketCapacity);
+               object.totalPrice = Collections.singletonMap("total_price", totalMarketCapacity);
            }
+       }
+       for(String str:obj.sort){
+            if(Objects.equals(str, "minPrice")) {
+                SearchRequest searchRequest = new SearchRequest("products");
+                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+                searchSourceBuilder.sort(SortBuilders.fieldSort("price").order(SortOrder.ASC));
+                searchSourceBuilder.size(1);
+                searchRequest.source(searchSourceBuilder);
+                SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+                if (searchResponse.getHits().getTotalHits().value > 0) {
+                    Map<String, Object> sourceAsMap = searchResponse.getHits().getHits()[0].getSourceAsMap();
+                    Object localMinPrice = sourceAsMap.get("price");
+                    if (localMinPrice != null && localMinPrice instanceof Double) {
+                            object.minPrice = (Double) localMinPrice;
+                        }
+                        else {
+                            object.minPrice = null; // or handle appropriately if no documents found
+                        }
+                }
+            }
+           if(Objects.equals(str, "maxPrice")) {
+               SearchRequest searchRequest = new SearchRequest("products");
+               SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+               searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+               searchSourceBuilder.sort(SortBuilders.fieldSort("price").order(SortOrder.DESC));
+               searchSourceBuilder.size(1);
+               searchRequest.source(searchSourceBuilder);
+               SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+               if (searchResponse.getHits().getTotalHits().value > 0) {
+                   Map<String, Object> sourceAsMap = searchResponse.getHits().getHits()[0].getSourceAsMap();
+                   Object localMaxPrice = sourceAsMap.get("price");
+                   if (localMaxPrice != null && localMaxPrice instanceof Double) {
+                       object.maxPrice = (Double) localMaxPrice;
+                   }
+                   else {
+                       object.maxPrice = null; // or handle appropriately if no documents found
+                   }
+               }
+           }
+       }
+
+       if(obj.range.onPrice!= null){
+            Double minRange= obj.range.onPrice.get(0);
+            Double maxRange = obj.range.onPrice.get(1);
+           SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+           searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+           searchSourceBuilder.sort(SortBuilders.fieldSort("price").order(SortOrder.ASC));
+
+           // Create a range aggregation to count products within the specified range
+           searchSourceBuilder.aggregation(
+                   AggregationBuilders.range("price_range")
+                           .field("price")
+                           .addRange(minRange, maxRange)
+           );
+
+           SearchRequest searchRequest = new SearchRequest("products");
+           searchRequest.source(searchSourceBuilder);
+
+           SearchResponse searchResponse =  getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+
+           // Get the range aggregation
+           Range rangeAgg = searchResponse.getAggregations().get("price_range");
+
+           // Get the count of products within the specified range
+           long rangeTotalCount = 0;
+           for (Range.Bucket bucket : rangeAgg.getBuckets()) {
+               rangeTotalCount += bucket.getDocCount();
+           }
+
+          object.rangeCount = rangeTotalCount;
        }
 
        return object;
 
     }
+
     public static RestHighLevelClient getRestClient() {
         return new RestHighLevelClient(
                 RestClient.builder(

@@ -10,4 +10,6 @@ import java.util.List;
 public class ObjectBody {
     public String filter;  //value -> category
     public List<String> aggregations;
+    public List<String> sort;
+    public RangeClass range;
 }

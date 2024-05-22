@@ -12,4 +12,7 @@ public class ReturnObj {
     public long filtcount;
     public Map<String, Map<Object, Long>> countByCate;
     public Map<String, Double> totalPrice;
+    public Double minPrice;
+    public Double maxPrice;
+    public long rangeCount;
 }
