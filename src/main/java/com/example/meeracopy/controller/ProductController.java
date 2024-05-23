@@ -520,156 +520,42 @@ public class ProductController {
 
             }
 
-        if (getObj.term.aggregations != null) {
 
-            for (String str : getObj.term.aggregations) {
-                if (Objects.equals(str, "minScore")) {
+
+
+
                     searchSourceBuilder.aggregation(
                             AggregationBuilders.min("min_score").field("score")
                     );
                     searchRequest.source(searchSourceBuilder);
-                    SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                    Min minAgg = searchResponse.getAggregations().get("min_score");
+                    SearchResponse searchResponse3 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+                    Min minAgg = searchResponse3.getAggregations().get("min_score");
                     putObj.minScore =(long)minAgg.getValue();
-                } else if (Objects.equals(str, "maxScore")) {
+
                     searchSourceBuilder.aggregation(
-                            AggregationBuilders.max("max_score").field("score")
-                    );
+                            AggregationBuilders.max("max_score").field("score"));
                     searchRequest.source(searchSourceBuilder);
-                    SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                    Max maxAgg = searchResponse.getAggregations().get("max_score");
+                    SearchResponse searchResponse4 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+                    Max maxAgg = searchResponse4.getAggregations().get("max_score");
                     putObj.maxScore = (long)maxAgg.getValue();
-                } else if (Objects.equals(str, "totalScore")) {
+
 
                         searchSourceBuilder.aggregation(
                                 AggregationBuilders.sum("total_score").field("score")
                         );
                         searchRequest.source(searchSourceBuilder);
-                        SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                        Sum sumAgg = searchResponse.getAggregations().get("total_score");
+                        SearchResponse searchResponse5 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+                        Sum sumAgg = searchResponse5.getAggregations().get("total_score");
                         putObj.totalScore = (long)sumAgg.getValue();
-                }
-
-            }
-        }
 
 
 
-/*if(getObj.term.sort!=null) {
-    for (String sorted : getObj.term.sort.language) {
-        if (Objects.equals(sorted, "asc")) {
-            searchSourceBuilder.aggregation(
-                    AggregationBuilders.terms("language_count").field("languageCode.keyword")
-            );
-           // System.out.println(searchSourceBuilder);
-            searchRequest.source(searchSourceBuilder);
-            SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-            Terms languageCount = searchResponse.getAggregations().get("language_count");
-            Map<String, Long> countsByLanguage = languageCount.getBuckets().stream()
-                    .collect(Collectors.toMap(
-                            Terms.Bucket::getKeyAsString,
-                            Terms.Bucket::getDocCount,
-                            (oldValue, newValue) -> oldValue, // Merge function to keep existing values
-                            LinkedHashMap::new // Preserve insertion order
-                    ));
-            countsByLanguage = countsByLanguage.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            Map.Entry::getValue,
-                            (oldValue, newValue) -> oldValue, // Merge function to keep existing values
-                            LinkedHashMap::new
-                    ));
-
-            //return countsByLanguage;
-            putObj.language = countsByLanguage;
-        } else if (Objects.equals(sorted, "desc")) {
-            searchSourceBuilder.aggregation(
-                    AggregationBuilders.terms("language2_count").field("languageCode.keyword")
-            );
-
-            searchRequest.source(searchSourceBuilder);
-            SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-            Terms languageCount2 = searchResponse.getAggregations().get("language2_count");
-            Map<String, Long> countsByLanguage2 = languageCount2.getBuckets().stream()
-                    .collect(Collectors.toMap(
-                            Terms.Bucket::getKeyAsString,
-                            Terms.Bucket::getDocCount,
-                            (oldValue, newValue) -> oldValue, // Merge function to keep existing values
-                            LinkedHashMap::new // Preserve insertion order
-                    ));
-            countsByLanguage2 = countsByLanguage2.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey(Comparator.reverseOrder()))
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            Map.Entry::getValue,
-                            (oldValue, newValue) -> oldValue, // Merge function to keep existing values
-                            LinkedHashMap::new
-                    ));
-
-            //return countsByLanguage;
-            putObj.language = countsByLanguage2;
-        }
-    }*/
-
-    /*for (String sorted : getObj.term.sort.source) {
-        if (Objects.equals(sorted, "asc")) {
-            searchSourceBuilder.aggregation(
-                    AggregationBuilders.terms("source_count").field("source.keyword")
-            );
-
-            searchRequest.source(searchSourceBuilder);
-            SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-            Terms sourceCount = searchResponse.getAggregations().get("source_count");
-            Map<String, Long> countsBySource = sourceCount.getBuckets().stream()
-                    .collect(Collectors.toMap(
-                            Terms.Bucket::getKeyAsString,
-                            Terms.Bucket::getDocCount,
-                            (oldValue, newValue) -> oldValue, // Merge function to keep existing values
-                            LinkedHashMap::new // Preserve insertion order
-                    ));
-            countsBySource = countsBySource.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey())
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            Map.Entry::getValue,
-                            (oldValue, newValue) -> oldValue, // Merge function to keep existing values
-                            LinkedHashMap::new
-                    ));
-
-            //return countsByLanguage;
-            putObj.source = countsBySource;
-        } else if (Objects.equals(sorted, "desc")) {
-            searchSourceBuilder.aggregation(
-                    AggregationBuilders.terms("source2_count").field("source.keyword")
-            );
-
-            searchRequest.source(searchSourceBuilder);
-            SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-            Terms sourceCount2 = searchResponse.getAggregations().get("source2_count");
-            Map<String, Long> countsBySource2 = sourceCount2.getBuckets().stream()
-                    .collect(Collectors.toMap(
-                            Terms.Bucket::getKeyAsString,
-                            Terms.Bucket::getDocCount,
-                            (oldValue, newValue) -> oldValue, // Merge function to keep existing values
-                            LinkedHashMap::new // Preserve insertion order
-                    ));
-            countsBySource2 = countsBySource2.entrySet().stream()
-                    .sorted(Map.Entry.comparingByKey(Comparator.reverseOrder()))
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            Map.Entry::getValue,
-                            (oldValue, newValue) -> oldValue, // Merge function to keep existing values
-                            LinkedHashMap::new
-                    ));
-
-            //return countsByLanguage;
-            putObj.source = countsBySource2;
-        }
 
 
-    }
-}*/
+
+
+
+
         return putObj;
     }
 

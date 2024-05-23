@@ -9,7 +9,7 @@ public class Term {
     public String value;
     public List<Filter> filters;
     public List <MyAggregations> myAggregations;
-    public List<String> aggregations;
+
 
    // public SortClass sort;
 }
