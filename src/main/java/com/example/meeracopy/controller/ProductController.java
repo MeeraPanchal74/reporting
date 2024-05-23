@@ -416,30 +416,32 @@ public class ProductController {
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(boolQuery);
 
 
-        SearchRequest searchRequest = new SearchRequest("globaldata1");
+        SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(searchSourceBuilder);
         SearchResponse searchResponse1 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
         System.out.println(boolQuery);
         putObj.no_of_posts = searchResponse1.getHits().getTotalHits().value;
 
-            for(MyAggregations  term:myAggregations ){
 
-                switch(term.field){
+
+        if(myAggregations!=null) {
+            for (MyAggregations term : myAggregations) {
+
+                switch (term.field) {
                     case "language":
-                        if(!Objects.equals(term.subaggregation, "none")) {
+                        if (!Objects.equals(term.subaggregation, "none")) {
                             searchSourceBuilder.aggregation(
                                     AggregationBuilders.terms("group_by_language").field("languageCode.keyword").subAggregation(AggregationBuilders.terms("group_by_source").field("source.keyword"))
                             );
-                        }
-                            else{
-                        searchSourceBuilder.aggregation(
-                                AggregationBuilders.terms("group_by_language").field("languageCode.keyword"));
+                        } else {
+                            searchSourceBuilder.aggregation(
+                                    AggregationBuilders.terms("group_by_language").field("languageCode.keyword"));
                         }
 
-                            searchRequest.source(searchSourceBuilder);
+                        searchRequest.source(searchSourceBuilder);
 
-                            SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                           // System.out.println(searchResponse);
+                        SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+                        // System.out.println(searchResponse);
                         Terms languageCount = searchResponse.getAggregations().get("group_by_language");
 
                         if (!Objects.equals("subaggregation", "none")) {
@@ -466,8 +468,7 @@ public class ProductController {
                                             LinkedHashMap::new
                                     ));
                             putObj.languageCode = languageSourceCounts;
-                        }
-                        else {
+                        } else {
 
                             Map<String, Long> languageSourceCounts = languageCount.getBuckets().stream()
                                     .collect(Collectors.toMap(
@@ -481,64 +482,106 @@ public class ProductController {
                         break;
 
                     case "source":
+                        System.out.println(term.projection.get("score"));
+
+                        if (term.projection.get("score") != null) {
+
+                            List<String> scoreProjections = new ArrayList<String>();
+
+                            for (String myStr : term.projection.get("score")) {
+                                scoreProjections.add(myStr);
+
+                            }
 
 
-                        searchSourceBuilder.aggregation(
-                                AggregationBuilders.terms("group_by_source")
-                                        .field("source.keyword")
-                                        .subAggregation(AggregationBuilders.sum("total_score").field("score"))
-                                        .subAggregation(AggregationBuilders.max("max_score").field("score"))
-                                        .subAggregation(AggregationBuilders.min("min_score").field("score"))
+                            searchSourceBuilder.aggregation(
+                                    AggregationBuilders.terms("group_by_source")
+                                            .field("source.keyword")
+                                            .subAggregation(
+                                                    AggregationBuilders.sum("total_score").field("score")
+                                            )
+                                            .subAggregation(
+                                                    AggregationBuilders.min("min_score").field("score")
+                                            )
+                                            .subAggregation(
+                                                    AggregationBuilders.max("max_score").field("score")
+                                            )
+                            );
+                            searchRequest.source(searchSourceBuilder);
 
-                        );
-                        searchRequest.source(searchSourceBuilder);
+                            SearchResponse searchResponse2 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+
+                            Terms sourceCount = searchResponse2.getAggregations().get("group_by_source");
 
 
-                        SearchResponse searchResponse2 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-
-                        Terms sourceCount = searchResponse2.getAggregations().get("group_by_source");
-                        System.out.println(searchResponse2+"searchResponse2");
-                        int counts=0;
-                        Map<String, List<Map<String, Object>>> sourceAggregationsSource = Map.of();
-
-                      //  for(String str: term.projection) {
-                            sourceAggregationsSource  = sourceCount.getBuckets().stream()
+                            Map<String, List<Map<String, Object>>> sourceAggregationsSource = sourceCount.getBuckets().stream()
                                     .collect(Collectors.toMap(
                                             Terms.Bucket::getKeyAsString,
-
                                             sourceBucket -> {
                                                 List<Map<String, Object>> resultList = new ArrayList<>();
                                                 Sum totalScore = sourceBucket.getAggregations().get("total_score");
                                                 Min minScore = sourceBucket.getAggregations().get("min_score");
-                                               Max maxScore =  sourceBucket.getAggregations().get("max_score");
-
-
+                                                Max maxScore = sourceBucket.getAggregations().get("max_score");
 
                                                 Map<String, Object> postCountMap = new HashMap<>();
                                                 postCountMap.put("No_of_Posts", sourceBucket.getDocCount());
-
-
-                                                Map<String, Object> minScoreMap = new HashMap<>();
-                                                Map<String, Object> maxScoreMap = new HashMap<>();
-                                                Map<String, Object> totalScoreMap = new HashMap<>();
-                                                totalScoreMap.put("totalScore", totalScore.getValue());
-                                                maxScoreMap.put("maxScore", maxScore.getValue());
-                                                minScoreMap.put("minScore",minScore.getValue());
-
-
                                                 resultList.add(postCountMap);
-                                                resultList.add(minScoreMap);
-                                                resultList.add(maxScoreMap);
-                                                resultList.add(totalScoreMap);
 
+                                                // Only add the fields that are in the projection
+                                                if (scoreProjections.contains("total") && totalScore != null) {
+                                                    //  System.out.print("inside totalscore");
+                                                    Map<String, Object> totalScoreMap = new HashMap<>();
+                                                    totalScoreMap.put("totalScore", totalScore.getValue());
+                                                    resultList.add(totalScoreMap);
+                                                }
+
+                                                if (scoreProjections.contains("min") && minScore != null) {
+                                                    Map<String, Object> minScoreMap = new HashMap<>();
+                                                    minScoreMap.put("minScore", minScore.getValue());
+                                                    resultList.add(minScoreMap);
+                                                }
+
+                                                if (scoreProjections.contains("max") && maxScore != null) {
+                                                    Map<String, Object> maxScoreMap = new HashMap<>();
+                                                    maxScoreMap.put("maxScore", maxScore.getValue());
+                                                    resultList.add(maxScoreMap);
+                                                }
 
                                                 return resultList;
                                             },
                                             (oldValue, newValue) -> oldValue,
                                             LinkedHashMap::new
                                     ));
-                      //  }
-                        putObj.source = sourceAggregationsSource;
+
+                            putObj.source = sourceAggregationsSource;
+                        } else {
+
+                            searchSourceBuilder.aggregation(
+                                    AggregationBuilders.terms("group_by_source")
+                                            .field("source.keyword"));
+
+                            searchRequest.source(searchSourceBuilder);
+                            SearchResponse searchResponse2 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+                            Terms sourceCount = searchResponse2.getAggregations().get("group_by_source");
+                            Map<String, List<Map<String, Object>>> sourceAggregationsSource = sourceCount.getBuckets().stream()
+                                    .collect(Collectors.toMap(
+                                            Terms.Bucket::getKeyAsString,
+                                            sourceBucket -> {
+                                                List<Map<String, Object>> resultList = new ArrayList<>();
+
+
+                                                Map<String, Object> postCountMap = new HashMap<>();
+                                                postCountMap.put("No_of_Posts", sourceBucket.getDocCount());
+                                                resultList.add(postCountMap);
+                                                return resultList;
+
+                                            },
+                                            (oldValue, newValue) -> oldValue,
+                                            LinkedHashMap::new
+                                    ));
+
+                            putObj.source = sourceAggregationsSource;
+                        }
 
                     default:
 
@@ -547,41 +590,42 @@ public class ProductController {
             }
 
 
+            searchSourceBuilder.aggregation(
+                    AggregationBuilders.min("min_score").field("score")
+            );
+            searchRequest.source(searchSourceBuilder);
+            SearchResponse searchResponse3 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+            Min minAgg = searchResponse3.getAggregations().get("min_score");
+            if(putObj.no_of_posts==0){
+                putObj.minScore = 0;
+            }
+            else {
+                putObj.minScore = (long) minAgg.getValue();
+            }
+
+            searchSourceBuilder.aggregation(
+                    AggregationBuilders.max("max_score").field("score"));
+            searchRequest.source(searchSourceBuilder);
+            SearchResponse searchResponse4 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+            Max maxAgg = searchResponse4.getAggregations().get("max_score");
+            if(putObj.no_of_posts==0) {
+              putObj.maxScore =0;
+            }
+            else{
+                putObj.maxScore = (long) maxAgg.getValue();
+            }
 
 
-
-                    searchSourceBuilder.aggregation(
-                            AggregationBuilders.min("min_score").field("score")
-                    );
-                    searchRequest.source(searchSourceBuilder);
-                    SearchResponse searchResponse3 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                    Min minAgg = searchResponse3.getAggregations().get("min_score");
-                    putObj.minScore =(long)minAgg.getValue();
-
-                    searchSourceBuilder.aggregation(
-                            AggregationBuilders.max("max_score").field("score"));
-                    searchRequest.source(searchSourceBuilder);
-                    SearchResponse searchResponse4 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                    Max maxAgg = searchResponse4.getAggregations().get("max_score");
-                    putObj.maxScore = (long)maxAgg.getValue();
+            searchSourceBuilder.aggregation(
+                    AggregationBuilders.sum("total_score").field("score")
+            );
+            searchRequest.source(searchSourceBuilder);
+            SearchResponse searchResponse5 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+            Sum sumAgg = searchResponse5.getAggregations().get("total_score");
+            putObj.totalScore = (long) sumAgg.getValue();
 
 
-                        searchSourceBuilder.aggregation(
-                                AggregationBuilders.sum("total_score").field("score")
-                        );
-                        searchRequest.source(searchSourceBuilder);
-                        SearchResponse searchResponse5 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                        Sum sumAgg = searchResponse5.getAggregations().get("total_score");
-                        putObj.totalScore = (long)sumAgg.getValue();
-
-
-
-
-
-
-
-
-
+        }
         return putObj;
     }
 
