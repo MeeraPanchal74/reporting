@@ -230,7 +230,7 @@ public class ProductController {
             if (Objects.equals(str, "minPrice")) {
                 SearchRequest searchRequest = new SearchRequest("products");
                 SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-                searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+                searchSourceBuilder.query(matchAllQuery());
                 searchSourceBuilder.sort(SortBuilders.fieldSort("price").order(SortOrder.ASC));
                 searchSourceBuilder.size(1);
                 searchRequest.source(searchSourceBuilder);
@@ -248,7 +248,7 @@ public class ProductController {
             if (Objects.equals(str, "maxPrice")) {
                 SearchRequest searchRequest = new SearchRequest("products");
                 SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-                searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+                searchSourceBuilder.query(matchAllQuery());
                 searchSourceBuilder.sort(SortBuilders.fieldSort("price").order(SortOrder.DESC));
                 searchSourceBuilder.size(1);
                 searchRequest.source(searchSourceBuilder);
@@ -269,7 +269,7 @@ public class ProductController {
             Double minRange = obj.range.onPrice.get(0);
             Double maxRange = obj.range.onPrice.get(1);
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
-            searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+            searchSourceBuilder.query(matchAllQuery());
             searchSourceBuilder.sort(SortBuilders.fieldSort("price").order(SortOrder.ASC));
             searchSourceBuilder.aggregation(
                     AggregationBuilders.range("price_range")
@@ -303,7 +303,7 @@ public class ProductController {
             SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
             SearchRequest searchRequest = new SearchRequest("products");
 
-            searchSourceBuilder.query(QueryBuilders.termQuery("category.keyword", value));
+            searchSourceBuilder.query(termQuery("category.keyword", value));
 
 
             if (userObj.groupBy.category.filters != null) {
@@ -358,7 +358,7 @@ public class ProductController {
         List<Filter> filters = getObj.term.filters;
         List<MyAggregations> myAggregations = getObj.term.myAggregations;
 
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
+        BoolQueryBuilder boolQuery = boolQuery();
 
         if(filters!=null) {
 
@@ -392,20 +392,20 @@ public class ProductController {
                     //String myVal = filter.value.toLowerCase();
                     case "CONTAINS":
 
-                        boolQuery.filter(QueryBuilders.termsQuery(filter.field,lowerCaseValues));
+                        boolQuery.filter(termsQuery(filter.field,lowerCaseValues));
                         break;
 
                     case "range":
                         System.out.println(lowerCaseValues.get(0));
-                        boolQuery.filter(QueryBuilders.rangeQuery(filter.field).gte(lowerCaseValues.get(0)).lte(lowerCaseValues.get(1)));
+                        boolQuery.filter(rangeQuery(filter.field).gte(lowerCaseValues.get(0)).lte(lowerCaseValues.get(1)));
                         break;
 
                     case "IN":
-                        boolQuery.filter(QueryBuilders.termsQuery(filter.field,lowerCaseValues));
+                        boolQuery.filter(termsQuery(filter.field,lowerCaseValues));
                         break;
 
                     case "NIN":
-                        boolQuery.mustNot(QueryBuilders.termsQuery(filter.field, lowerCaseValues));
+                        boolQuery.mustNot(termsQuery(filter.field, lowerCaseValues));
                         break;
 
                     default:
@@ -439,7 +439,7 @@ public class ProductController {
                             searchRequest.source(searchSourceBuilder);
 
                             SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                            System.out.println(searchResponse);
+                           // System.out.println(searchResponse);
                         Terms languageCount = searchResponse.getAggregations().get("group_by_language");
 
                         if (!Objects.equals("subaggregation", "none")) {
@@ -482,10 +482,14 @@ public class ProductController {
 
                     case "source":
 
+
                         searchSourceBuilder.aggregation(
                                 AggregationBuilders.terms("group_by_source")
                                         .field("source.keyword")
                                         .subAggregation(AggregationBuilders.sum("total_score").field("score"))
+                                        .subAggregation(AggregationBuilders.max("max_score").field("score"))
+                                        .subAggregation(AggregationBuilders.min("min_score").field("score"))
+
                         );
                         searchRequest.source(searchSourceBuilder);
 
@@ -493,26 +497,48 @@ public class ProductController {
                         SearchResponse searchResponse2 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
 
                         Terms sourceCount = searchResponse2.getAggregations().get("group_by_source");
+                        System.out.println(searchResponse2+"searchResponse2");
+                        int counts=0;
+                        Map<String, List<Map<String, Object>>> sourceAggregationsSource = Map.of();
 
-                        Map<String, List<Map<String, Object>>> sourceAggregations = sourceCount.getBuckets().stream()
-                                .collect(Collectors.toMap(
-                                        Terms.Bucket::getKeyAsString,
-                                        sourceBucket -> {
-                                            Sum totalScore = sourceBucket.getAggregations().get("total_score");
-                                            List<Map<String, Object>> resultList = new ArrayList<>();
-                                            Map<String, Object> postCountMap = new HashMap<>();
-                                            postCountMap.put("No_of_Posts", sourceBucket.getDocCount());
-                                            Map<String, Object> totalScoreMap = new HashMap<>();
-                                            totalScoreMap.put("totalScore", totalScore.getValue());
-                                            resultList.add(postCountMap);
-                                            resultList.add(totalScoreMap);
-                                            return resultList;
-                                        },
-                                        (oldValue, newValue) -> oldValue,
-                                        LinkedHashMap::new
-                                ));
+                      //  for(String str: term.projection) {
+                            sourceAggregationsSource  = sourceCount.getBuckets().stream()
+                                    .collect(Collectors.toMap(
+                                            Terms.Bucket::getKeyAsString,
 
-                        putObj.source = sourceAggregations;
+                                            sourceBucket -> {
+                                                List<Map<String, Object>> resultList = new ArrayList<>();
+                                                Sum totalScore = sourceBucket.getAggregations().get("total_score");
+                                                Min minScore = sourceBucket.getAggregations().get("min_score");
+                                               Max maxScore =  sourceBucket.getAggregations().get("max_score");
+
+
+
+                                                Map<String, Object> postCountMap = new HashMap<>();
+                                                postCountMap.put("No_of_Posts", sourceBucket.getDocCount());
+
+
+                                                Map<String, Object> minScoreMap = new HashMap<>();
+                                                Map<String, Object> maxScoreMap = new HashMap<>();
+                                                Map<String, Object> totalScoreMap = new HashMap<>();
+                                                totalScoreMap.put("totalScore", totalScore.getValue());
+                                                maxScoreMap.put("maxScore", maxScore.getValue());
+                                                minScoreMap.put("minScore",minScore.getValue());
+
+
+                                                resultList.add(postCountMap);
+                                                resultList.add(minScoreMap);
+                                                resultList.add(maxScoreMap);
+                                                resultList.add(totalScoreMap);
+
+
+                                                return resultList;
+                                            },
+                                            (oldValue, newValue) -> oldValue,
+                                            LinkedHashMap::new
+                                    ));
+                      //  }
+                        putObj.source = sourceAggregationsSource;
 
                     default:
 
