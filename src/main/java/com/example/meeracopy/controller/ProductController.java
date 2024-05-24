@@ -433,7 +433,8 @@ public class ProductController {
                             searchSourceBuilder.aggregation(
                                     AggregationBuilders.terms("group_by_language").field("languageCode.keyword").subAggregation(AggregationBuilders.terms("group_by_source").field("source.keyword"))
                             );
-                        } else {
+                        }
+                        else {
                             searchSourceBuilder.aggregation(
                                     AggregationBuilders.terms("group_by_language").field("languageCode.keyword"));
                         }
@@ -444,7 +445,8 @@ public class ProductController {
                         // System.out.println(searchResponse);
                         Terms languageCount = searchResponse.getAggregations().get("group_by_language");
 
-                        if (!Objects.equals("subaggregation", "none")) {
+                        if (!term.subaggregation.isEmpty()  && !term.subaggregation.equals("none")) {
+                                System.out.println(term.subaggregation);
                             Map<String, List<Map<String, Object>>> languageSourceCounts = languageCount.getBuckets().stream()
                                     .collect(Collectors.toMap(
                                             Terms.Bucket::getKeyAsString,
