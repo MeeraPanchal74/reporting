@@ -9,5 +9,5 @@ public class MyAggregations {
     public String field;
     public String value;
     public String subaggregation;
-    public Map<String, List<String>> projection;
+    public List<Map<String, List<String>>> projection;
 }

@@ -1,5 +1,8 @@
 package com.example.meeracopy.domain.globaldata;
 
+
+import org.elasticsearch.action.search.SearchRequest;
+
 import java.util.List;
 import java.util.Map;
 
@@ -12,4 +15,5 @@ public class ReturnGlobal {
     public Map<String, List<Map<String, Object>>>  languageCode;
     public Map<String,Long> languageCount;
     public  Map<String, List<Map<String, Object>>> source;
+    public String searchRequest;
 }
