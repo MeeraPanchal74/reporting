@@ -31,7 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.elasticsearch.client.RestHighLevelClient;
-
+import org.elasticsearch.search.aggregations.BucketOrder;
 import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -88,28 +88,7 @@ public class ProductController {
                         new HttpHost("localhost", 9200, "http")));
     }
 
-    private void removeUnwantedParameters(JsonNode rootNode) {
-        // Remove top-level boost if it exists
-        ((ObjectNode) rootNode).remove("boost");
 
-        // Iterate through filter array to remove boost fields
-        if (rootNode.has("filter")) {
-            for (JsonNode filterNode : rootNode.get("filter")) {
-                ((ObjectNode) filterNode.get("range")).remove("boost");
-                ((ObjectNode) filterNode.get("terms")).remove("boost");
-            }
-        }
-
-        // Iterate through must_not array to remove boost fields
-        if (rootNode.has("must_not")) {
-            for (JsonNode mustNotNode : rootNode.get("must_not")) {
-                ((ObjectNode) mustNotNode.get("terms")).remove("boost");
-            }
-        }
-
-        // Remove adjust_pure_negative if it exists
-        ((ObjectNode) rootNode).remove("adjust_pure_negative");
-    }
 
     @PostMapping("/generalGlobalQuery")
     public ReturnGlobal generalGlobalQuery(@RequestBody GlobalBody getObj) throws IOException, ParseException {
@@ -119,6 +98,7 @@ public class ProductController {
         List<MyAggregations> myAggregations = getObj.query.Aggregations;
 
         BoolQueryBuilder boolQuery = boolQuery();
+
 
         if(filters!=null) {
 
@@ -157,7 +137,7 @@ public class ProductController {
 
                     case "range":
                         System.out.println(lowerCaseValues.get(0));
-                        boolQuery.filter(rangeQuery(filter.field).gte(lowerCaseValues.get(0)).lte(lowerCaseValues.get(1)));
+                        boolQuery.filter(QueryBuilders.rangeQuery(filter.field).from(lowerCaseValues.get(0)).to(lowerCaseValues.get(1)));
                         break;
 
                     case "IN":
@@ -189,14 +169,37 @@ public class ProductController {
 
                 switch (term.field) {
                     case "language":
+                        long num=10;
+                        boolean sortVal = false;
+                        if(Objects.equals(term.sort, "asc")){
+                            sortVal = true;
+                        }
+                        if (term.size != null && term.size<=20) {
+                            num = term.size;
+                        } else {
+                            num = 10;
+                        }
+
+
                         if (!Objects.equals(term.subaggregation, "none")) {
                             searchSourceBuilder.aggregation(
-                                    AggregationBuilders.terms("group_by_language").field("languageCode.keyword").subAggregation(AggregationBuilders.terms("group_by_source").field("source.keyword"))
+                                    AggregationBuilders.terms("group_by_language")
+
+                                    .field("languageCode.keyword")
+                                            .subAggregation(AggregationBuilders.terms("group_by_source")
+                                                    .field("source.keyword"))
+                                            .size((int) num)
+                                            .order(BucketOrder.count(sortVal))
+
+
+
                             );
                         }
                         else {
                             searchSourceBuilder.aggregation(
-                                    AggregationBuilders.terms("group_by_language").field("languageCode.keyword"));
+                                    AggregationBuilders.terms("group_by_language").field("languageCode.keyword")
+                                            .size((int)num)
+                             .order(BucketOrder.count(sortVal)));
                         }
 
                         searchRequest.source(searchSourceBuilder);
@@ -230,7 +233,10 @@ public class ProductController {
                                             LinkedHashMap::new
                                     ));
                             putObj.languageCode = languageSourceCounts;
-                        } else {
+                        }
+
+
+                        else {
 
                             Map<String, Long> languageSourceCounts = languageCount.getBuckets().stream()
                                     .collect(Collectors.toMap(
@@ -244,6 +250,16 @@ public class ProductController {
                         break;
 
                     case "source":
+                        boolean sortVal1 = false;
+                        long num1 = 10;
+                        if (term.size != null && term.size<=20) {
+                            num1 = term.size;
+                        } else {
+                            num1 = 10;
+                        }
+                        if(Objects.equals(term.sort, "asc")){
+                            sortVal = true;
+                        }
                         for(Map<String, List<String>> myProj: term.projection){
                             System.out.println(myProj.get("score"));
                             if (myProj.containsKey("score")) {
@@ -260,6 +276,8 @@ public class ProductController {
                                     searchSourceBuilder.aggregation(
                                             AggregationBuilders.terms("group_by_source")
                                                     .field("source.keyword")
+                                                    .size((int) num1)
+                                                    .order(BucketOrder.count(sortVal1))
                                                     .subAggregation(
                                                             AggregationBuilders.sum("total_score").field("score")
                                                     )
@@ -395,10 +413,9 @@ public class ProductController {
         putObj.searchRequest = searchRequest.source().toString();
         return putObj;
 
-        }
-
     }
 
+}
 
 
 

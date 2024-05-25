@@ -10,4 +10,6 @@ public class MyAggregations {
     public String value;
     public String subaggregation;
     public List<Map<String, List<String>>> projection;
+    public Long size;
+    public String sort;
 }
