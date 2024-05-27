@@ -1,4 +1,4 @@
-package com.example.meeracopy.controller;
+/*package com.example.meeracopy.controller;
 
 import com.example.meeracopy.domain.*;
 import com.example.meeracopy.domain.globaldata.GlobalBody;
@@ -6,6 +6,7 @@ import com.example.meeracopy.domain.globaldata.ReturnGlobal;
 import com.example.meeracopy.filters.Filter;
 import com.example.meeracopy.myAggregations.MyAggregations;
 import com.example.meeracopy.repo.ProductRepo;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -15,8 +16,12 @@ import org.elasticsearch.action.search.SearchRequest;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
+import org.elasticsearch.common.ParseField;
+import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.*;
 import org.elasticsearch.index.query.*;
+import org.elasticsearch.search.SearchModule;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.Aggregations;
 import org.elasticsearch.search.aggregations.bucket.terms.ParsedStringTerms;
@@ -40,6 +45,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.elasticsearch.index.query.QueryBuilders.*;
 
@@ -62,8 +71,6 @@ public class ProductController {
 
 
 
-
-
     @GetMapping("/findAllGlobal")
     public ResponseEntity<List<UnifiedModel>> findAllGlobal() throws IOException {
         List<UnifiedModel> unifiedModels = elasticSearchQuery.findAllGlobal();
@@ -71,15 +78,57 @@ public class ProductController {
         return new ResponseEntity<>(unifiedModels, HttpStatus.OK);
     }
 
+    public static Map<String, Object> convertBoolQueryToMap(BoolQueryBuilder boolQuery) {
+        Map<String, Object> queryMap = new HashMap<>();
+
+        List<Map<String, Object>> filterList = new ArrayList<>();
+        List<Map<String, Object>> mustNotList = new ArrayList<>();
+
+        // Iterate over filter clauses
+        for (QueryBuilder filter : boolQuery.filter()) {
+            filterList.add(buildQueryMap(filter));
+        }
+
+        // Iterate over must_not clauses
+        for (QueryBuilder mustNot : boolQuery.mustNot()) {
+            mustNotList.add(buildQueryMap(mustNot));
+        }
+
+        // Put filter and must_not clauses into the query map
+        queryMap.put("filter", filterList);
+        queryMap.put("must_not", mustNotList);
+
+        // Handle adjust_pure_negative and boost if needed
 
 
 
+        return Map.of("bool", queryMap);
+    }
 
+    // Helper method to build a map for a single query clause
+    private static Map<String, Object> buildQueryMap(QueryBuilder queryBuilder) {
+        Map<String, Object> queryMap = new HashMap<>();
 
+        if (queryBuilder instanceof TermsQueryBuilder) {
+            TermsQueryBuilder termsQuery = (TermsQueryBuilder) queryBuilder;
+            queryMap.put("terms", Map.of(
+                    termsQuery.fieldName(), termsQuery.values()
+            ));
+        } else if (queryBuilder instanceof RangeQueryBuilder) {
+            RangeQueryBuilder rangeQuery = (RangeQueryBuilder) queryBuilder;
+            Map<String, Object> rangeDetails = new HashMap<>();
+            rangeDetails.put("from", rangeQuery.from());
+            rangeDetails.put("to", rangeQuery.to());
+            rangeDetails.put("include_lower", rangeQuery.includeLower());
+            rangeDetails.put("include_upper", rangeQuery.includeUpper());
+            rangeDetails.put("boost", rangeQuery.boost());
 
+            queryMap.put("range", Map.of(rangeQuery.fieldName(), rangeDetails));
+        }
+        // Add other conditions for different types of queries if needed
 
-
-
+        return queryMap;
+    }
 
 
     public static RestHighLevelClient getRestClient() {
@@ -96,7 +145,7 @@ public class ProductController {
 
         List<Filter> filters = getObj.query.filters;
         List<MyAggregations> myAggregations = getObj.query.Aggregations;
-
+        Map<String, Object> queryMap = new HashMap<>();
         BoolQueryBuilder boolQuery = boolQuery();
 
 
@@ -106,18 +155,17 @@ public class ProductController {
                 List<Object> lowerCaseValues = new ArrayList<>();
 
 
-
                 for (Object value : filter.value) {
-                    if (value instanceof String && !Objects.equals(filter.field, "postedAt")) {
+                    if (value instanceof String && !Objects.equals(filter.field, "postingTime")) {
                         lowerCaseValues.add(((String) value).toLowerCase());
                     }
 
-                    else if(!Objects.equals(filter.field, "postedAt")){
+                    else if(!Objects.equals(filter.field, "postingTime")){
                         lowerCaseValues.add(value);
                     }
                 }
 
-                if(Objects.equals(filter.field, "postedAt")){
+                if(Objects.equals(filter.field, "postingTime")){
                     for(String value: filter.value){
                         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
                         LocalDate localDate = LocalDate.parse(value, formatter);
@@ -129,15 +177,25 @@ public class ProductController {
 
                 switch (filter.type) {
 
-                    //String myVal = filter.value.toLowerCase();
                     case "CONTAINS":
 
                         boolQuery.filter(termsQuery(filter.field,lowerCaseValues));
+
+                        Object queryBuilder = null;
+                        TermsQueryBuilder termsQuery = (TermsQueryBuilder) queryBuilder;
+                        queryMap.put("type", "terms");
+                        queryMap.put("field", termsQuery.fieldName());
+                        List<Object> values = new ArrayList<>();
+                        for (Object value : termsQuery.values()) {
+
+                            values.add(value);
+                        }
+                        queryMap.put("values", values);
                         break;
 
                     case "range":
-                        System.out.println(lowerCaseValues.get(0));
-                        boolQuery.filter(QueryBuilders.rangeQuery(filter.field).from(lowerCaseValues.get(0)).to(lowerCaseValues.get(1)));
+                        ;
+                        boolQuery.filter(rangeQuery(filter.field).from(lowerCaseValues.get(0)).to(lowerCaseValues.get(1)));
                         break;
 
                     case "IN":
@@ -153,11 +211,50 @@ public class ProductController {
                 }
             }
         }
-        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder().query(boolQuery);
+
+
+
+        Map<String, Object> jsonMap;
+        Map<String, Object> mp = convertBoolQueryToMap(boolQuery);
+        ObjectMapper mapper = new ObjectMapper();
+        String jsonString = "";
+        try {
+            // Serialize map to JSON string
+            jsonString = mapper.writeValueAsString(mp);
+
+            // Deserialize JSON string back to map
+            jsonMap = mapper.readValue(jsonString, Map.class);
+
+            // Print the map to verify its structure
+
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+
+
+
+
+
+        SearchModule sm = new SearchModule(Settings.EMPTY, false, Collections.emptyList());
+        XContentParser parser = XContentFactory.xContent(XContentType.JSON)
+                .createParser(new NamedXContentRegistry(sm.getNamedXContents()),
+                        LoggingDeprecationHandler.INSTANCE,
+                        jsonString);
+
+
+
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query(QueryBuilders.wrapperQuery(jsonString));
+
 
 
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(searchSourceBuilder);
+
         SearchResponse searchResponse1 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
 
         putObj.no_of_posts = searchResponse1.getHits().getTotalHits().value;
@@ -185,9 +282,9 @@ public class ProductController {
                             searchSourceBuilder.aggregation(
                                     AggregationBuilders.terms("group_by_language")
 
-                                            .field("languageCode")
+                                            .field("languageCode.keyword")
                                             .subAggregation(AggregationBuilders.terms("group_by_source")
-                                                    .field("source"))
+                                                    .field("source.keyword"))
                                             .size((int) num)
                                             .order(BucketOrder.count(sortVal))
 
@@ -197,19 +294,21 @@ public class ProductController {
                         }
                         else {
                             searchSourceBuilder.aggregation(
-                                    AggregationBuilders.terms("group_by_language").field("languageCode")
+                                    AggregationBuilders.terms("group_by_language").field("languageCode.keyword")
                                             .size((int)num)
                                             .order(BucketOrder.count(sortVal)));
                         }
 
+
+
                         searchRequest.source(searchSourceBuilder);
 
                         SearchResponse searchResponse = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-                        // System.out.println(searchResponse);
+
                         Terms languageCount = searchResponse.getAggregations().get("group_by_language");
 
                         if (!term.subaggregation.isEmpty()  && !term.subaggregation.equals("none")) {
-                            System.out.println(term.subaggregation);
+
                             Map<String, List<Map<String, Object>>> languageSourceCounts = languageCount.getBuckets().stream()
                                     .collect(Collectors.toMap(
                                             Terms.Bucket::getKeyAsString,
@@ -261,7 +360,7 @@ public class ProductController {
                             sortVal = true;
                         }
                         for(Map<String, List<String>> myProj: term.projection){
-                            System.out.println(myProj.get("score"));
+
                             if (myProj.containsKey("score")) {
                                 if (myProj.get("score") != null) {
 
@@ -275,7 +374,7 @@ public class ProductController {
 
                                     searchSourceBuilder.aggregation(
                                             AggregationBuilders.terms("group_by_source")
-                                                    .field("source")
+                                                    .field("source.keyword")
                                                     .size((int) num1)
                                                     .order(BucketOrder.count(sortVal1))
                                                     .subAggregation(
@@ -340,7 +439,7 @@ public class ProductController {
 
                                 searchSourceBuilder.aggregation(
                                         AggregationBuilders.terms("group_by_source")
-                                                .field("source"));
+                                                .field("source.keyword"));
 
                                 searchRequest.source(searchSourceBuilder);
                                 SearchResponse searchResponse2 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
@@ -385,38 +484,34 @@ public class ProductController {
                 putObj.minScore = (long) minAgg.getValue();
             }
 
+            searchSourceBuilder.aggregation(
+                    AggregationBuilders.max("max_score").field("score"));
+            searchRequest.source(searchSourceBuilder);
+            SearchResponse searchResponse4 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+            Max maxAgg = searchResponse4.getAggregations().get("max_score");
+            if(putObj.no_of_posts==0) {
+                putObj.maxScore =0;
+            }
+            else{
+                putObj.maxScore = (long) maxAgg.getValue();
+            }
 
+
+            searchSourceBuilder.aggregation(
+                    AggregationBuilders.sum("total_score").field("score")
+            );
+            searchRequest.source(searchSourceBuilder);
+            SearchResponse searchResponse5 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
+            Sum sumAgg = searchResponse5.getAggregations().get("total_score");
+            putObj.totalScore = (long) sumAgg.getValue();
 
 
         }
 
-        searchSourceBuilder.aggregation(
-                AggregationBuilders.max("max_score").field("score"));
-        searchRequest.source(searchSourceBuilder);
-        SearchResponse searchResponse4 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-        Max maxAgg = searchResponse4.getAggregations().get("max_score");
-        if(putObj.no_of_posts==0) {
-            putObj.maxScore =0;
-        }
-        else{
-            putObj.maxScore = (long) maxAgg.getValue();
-        }
-
-
-        searchSourceBuilder.aggregation(
-                AggregationBuilders.sum("total_score").field("score")
-        );
-        searchRequest.source(searchSourceBuilder);
-        SearchResponse searchResponse5 = getRestClient().search(searchRequest, RequestOptions.DEFAULT);
-        Sum sumAgg = searchResponse5.getAggregations().get("total_score");
-        putObj.totalScore = (long) sumAgg.getValue();
-        System.out.println(searchRequest.source());
-        putObj.searchRequest = searchRequest.source().toString();
+        // System.out.println(searchRequest.source());
+        putObj.searchRequest = searchSourceBuilder.toString();
         return putObj;
 
     }
 
-}
-
-
-
+}*/
